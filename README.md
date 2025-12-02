@@ -112,7 +112,7 @@ python tool/convert_dataset.py   --dataset_name Industrial_and_Scientific   --da
 <!-- end list -->
 
 ```bash
-python GR/sft.py   --category "Industrial_and_Scientific"   --output_dir "./output/sft"   --base_model "./models/Qwen2.5-0.5B"   --train_file "./data/sft_ready/train/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --eval_file "./data/sft_ready/valid/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --sid_index_path "./data/processed/Industrial_and_Scientific/Industrial_and_Scientific.index.json"   --item_meta_path "./data/processed/Industrial_and_Scientific/Industrial_and_Scientific.item.json"   --learning_rate 1e-5   --micro_batch_size 8   --batch_size 16   --num_epochs 10   --cutoff_len 1024
+python GR/sft.py   --category "Industrial_and_Scientific"   --output_dir "./output/sft"   --base_model "./models/Qwen2.5-0.5B"   --train_file "./data/sft_ready/train/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --eval_file "./data/sft_ready/valid/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --sid_index_path "./data/processed/Industrial_and_Scientific/Industrial_and_Scientific.index.json"   --item_meta_path "./data/processed/Industrial_and_Scientific/Industrial_and_Scientific.item.json"   --learning_rate 2e-5   --micro_batch_size 8   --batch_size 16   --num_epochs 10   --cutoff_len 1024
 ```
 
 ### Step 7: 评估 (Evaluation)
@@ -123,13 +123,13 @@ python GR/sft.py   --category "Industrial_and_Scientific"   --output_dir "./outp
 **生成预测结果：**
 
 ```bash
-python src/evaluate.py --model_path ./output/sft_final/final_checkpoint --data_dir ./data/processed --output_file ./output/eval_result.json --num_beams 20
+python tool/evaluate.py   --category "Industrial_and_Scientific"   --base_model "./output/sft/final_checkpoint"   --test_data_path "./data/sft_ready/test/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --info_file "./data/sft_ready/info/Industrial_and_Scientific_5_2016-10-2018-11.txt"   --result_json_data "./output/eval_final.json"   --num_beams 20   --cf_hints_path "dir_final/cf_hints.json"
 ```
 
 **计算指标：**
 
 ```bash
-python src/metrics.py --file ./output/eval_result.json
+python tool/calc.py --file ./output/eval_result.json
 ```
 
 -----
@@ -138,8 +138,9 @@ python src/metrics.py --file ./output/eval_result.json
 
 | Experiment | Configuration | Hint Strategy |
 | :--- | :--- | :--- |
-| **Baseline** | 原版复现 | 无 Hint |
-| **miniGR-CF** | **LightGCN 增强hints** | **Train: Dropout(0.3) & Clean Target / Test: Full Hint** |
+| **Baseline-0.7b** | 原版0.7b复现 | 无 Hint |
+| **Baseline** | 原版的结果 | 无hint |
+| **miniGR-CF** | **采用qwen2.5-0.7bLightGCN 增强hints** | **Train: Dropout(0.3) & Clean Target / Test: Full Hint** |
 
 ## 🔖 Citation & Acknowledgement
 

@@ -4,8 +4,9 @@ import torch
 import json
 import os
 import sys
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from transformers import GenerationConfig, AutoTokenizer, AutoModelForCausalLM, LogitsProcessorList
-from data import EvalSidDataset 
+from GR.data import EvalSidDataset 
 sys.path.append(".") 
 from LogitProcessor import ConstrainedLogitsProcessor
 
