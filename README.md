@@ -74,7 +74,7 @@ huggingface-cli download --repo-type model "Qwen/Qwen2.5-0.5B" --local-dir "mode
 解析原始数据，执行 K-Core 过滤，并按 **2017.10-2018.11** 时间窗口切分数据。
 
 ```bash
-python src/process_raw.py --raw_dir ./data/raw --out_dir ./data/processed --cat Industrial_and_Scientific --st_year 2017 --st_month 10 --ed_year 2018 --ed_month 11
+python tool/amazon18_data_process.py --dataset Industrial_and_Scientific --reviews_file ./data/raw/Industrial_and_Scientific_5.json --metadata_file ./data/raw/meta_Industrial_and_Scientific.json --user_k 5 --item_k 5 --st_year 2017 --st_month 10 --ed_year 2018 --ed_month 11 --output_path ./data/processed     
 ```
 
 ### Step 2: 生成语义 ID (Semantic IDs)
@@ -82,15 +82,17 @@ python src/process_raw.py --raw_dir ./data/raw --out_dir ./data/processed --cat 
 使用 Qwen 提取商品标题向量，并通过层级聚类生成 3 层语义 ID。
 
 ```bash
-python src/generate_sids.py --data_dir ./data/processed --model_path ./models/Qwen2.5-0.5B --cat Industrial_and_Scientific
+python tool/amazon_text2emb.py --dataset Industrial_and_Scientific --root ./data/processed/Industrial_and_Scientific --plm_name qwen --plm_checkpoint "./models/Qwen2.5-0.5B"
 ```
-
+```bash
+python RQ/rqkmeans_faiss.py --dataset Industrial_and_Scientific --data_path data/processed/Industrial_and_Scientific/embeddings/Industrial_and_Scientific.emb-qwen-td.npy
+```
 ### Step 3: 提取协同信号 (Collaborative Signals)
 
 训练 LightGCN 模型以捕获用户行为模式，并导出物品协同向量。
 
 ```bash
-python src/train_lightgcn.py --data_dir ./data/processed --cat Industrial_and_Scientific
+python CF/train_lightgcn.py   --dataset "Industrial_and_Scientific"   --data_dir "./data/processed"   --output_path "./data/processed/Industrial_and_Scientific/lightgcn_emb.npy"
 ```
 
 ### Step 4: 生成协同提示 (Generate Hints)
@@ -98,7 +100,7 @@ python src/train_lightgcn.py --data_dir ./data/processed --cat Industrial_and_Sc
 基于 LightGCN 向量检索每个物品的 Top-K 互补邻居，生成提示字典。
 
 ```bash
-python src/generate_hints.py --data_dir ./data/processed --cat Industrial_and_Scientific
+python tool/gen_hints.py   --cf_emb "./data/processed/Industrial_and_Scientific/lightgcn_emb.npy"   --sem_idx "./data/processed/Industrial_and_Scientific/Industrial_and_Scientific.index.json"   --out "./data/processed/Industrial_and_Scientific/cf_hints.json"
 ```
 
 ### Step 5: 准备 SFT 数据 (Prepare Data)
@@ -106,7 +108,7 @@ python src/generate_hints.py --data_dir ./data/processed --cat Industrial_and_Sc
 生成精简版（Keep Longest Only）的主任务训练数据，并在生成时注入 Hint。
 
 ```bash
-python src/convert_dataset.py --data_dir ./data/processed --cat Industrial_and_Scientific --out_dir ./data/sft_ready --hints_file ./data/processed/hints.json --keep_longest_only
+python tool/convert_dataset.py   --dataset_name Industrial_and_Scientific   --data_dir ./data/processed/Industrial_and_Scientific   --output_dir ./data/sft_ready  --keep_longest_only   --hints_file "./data/processed/Industrial_and_Scientific/cf_hints.json"
 ```
 
 ### Step 6: SFT 训练 (Training)
@@ -119,7 +121,7 @@ python src/convert_dataset.py --data_dir ./data/processed --cat Industrial_and_S
 <!-- end list -->
 
 ```bash
-python src/train.py --out_dir ./output/sft_final --batch_size 128 --micro_batch_size 16 --epochs 10 --dropout 0.3
+python GR/sft.py   --category "Industrial_and_Scientific"   --output_dir "./output/sft"   --base_model "./models/Qwen2.5-0.5B"   --train_file "./data/sft_ready/train/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --eval_file "./data/sft_ready/valid/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --sid_index_path "./data/processed/Industrial_and_Scientific/Industrial_and_Scientific.index.json"   --item_meta_path "./data/processed/Industrial_and_Scientific/Industrial_and_Scientific.item.json"   --learning_rate 1e-5   --micro_batch_size 8   --batch_size 16   --num_epochs 10   --cutoff_len 1024
 ```
 
 ### Step 7: 评估 (Evaluation)
@@ -146,6 +148,34 @@ python src/metrics.py --file ./output/eval_result.json
 | Experiment | Configuration | Hint Strategy |
 | :--- | :--- | :--- |
 | **Baseline** | 原版复现 | 无 Hint |
-| **miniGR-CF** | **LightGCN 增强** | **Train: Dropout(0.3) & Clean Target / Test: Full Hint** |
+| **miniGR-CF** | **LightGCN 增强hints** | **Train: Dropout(0.3) & Clean Target / Test: Full Hint** |
 
-*注：本项目通过 `dataset.py` 实现了动态防泄露逻辑，训练时会自动剔除 Hint 中的 Target Item，防止标签泄露。*
+## 🔖 Citation & Acknowledgement
+
+本项目主要基于以下优秀开源工作进行改进：
+
+  * **MiniOneRec**: An Open-Source Framework for Scaling Generative Recommendation.
+
+      * GitHub: [https://github.com/Isheng-Z/MiniOneRec](https://github.com/Isheng-Z/MiniOneRec)
+      * Paper: [arXiv:2510.24431](https://arxiv.org/abs/2510.24431)
+
+  * **LightGCN**: Simplifying and Powering Graph Convolution Network for Recommendation.
+
+      * Paper: [SIGIR 2020](https://arxiv.org/abs/2002.02126)
+
+如果您在研究中使用了本项目或原始 MiniOneRec 代码，请引用：
+
+```bibtex
+@misc{MiniOneRec,
+  title={MiniOneRec: An Open-Source Framework for Scaling Generative Recommendation},
+  author={Xiaoyu Kong and Leheng Sheng and Junfei Tan and Yuxin Chen and Jiancan Wu and An Zhang and Xiang Wang and Xiangnan He},
+  year={2025},
+  eprint={2510.24431},
+  archivePrefix={arXiv},
+  primaryClass={cs.IR}
+}
+```
+
+## 🙏 致谢
+
+感谢 [MiniOneRec Team](https://github.com/AkaliKong/MiniOneRec/issues) 提供的代码基础和数据处理脚本。本项目的核心架构（SFT 多任务训练、RQ-kmeans ID 生成）均复用于该仓库，并在此基础上增加了协同信号增强模块。
