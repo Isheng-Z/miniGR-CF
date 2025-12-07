@@ -51,6 +51,7 @@ def train(
     sid_index_path: str = "",
     item_meta_path: str = "",
     cf_hints_path: str = "", 
+    hint_dropout: float = 0.3,
 ):
     set_seed(seed)
     print(f"Category: {category}")
@@ -104,7 +105,7 @@ def train(
         seed=seed,
         category=category,
         cf_hints_path=cf_hints_path,
-        hint_dropout_rate=0.3  # <--- 【关键】开启训练时的随机丢弃 (30%)
+        hint_dropout_rate=hint_dropout 
     )
     train_datasets.append(train_data1)
     
