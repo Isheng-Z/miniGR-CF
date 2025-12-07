@@ -125,13 +125,13 @@ python GR/sft.py   --category "Industrial_and_Scientific"   --output_dir "./outp
 **生成预测结果：**
 
 ```bash
-python tool/evaluate.py   --category "Industrial_and_Scientific"   --base_model "./output/sft/final_checkpoint"   --test_data_path "./data/sft_ready/test/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --info_file "./data/sft_ready/info/Industrial_and_Scientific_5_2016-10-2018-11.txt"   --result_json_data "./output/eval_final.json"   --num_beams 20   --cf_hints_path "./data/processed/Industrial_and_Scientific/cf_hints.json"
+python tool/evaluate.py   --category "Industrial_and_Scientific"   --base_model "./output/sft_hints/final_checkpoint"   --test_data_path "./data/sft_ready/test/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --info_file "./data/sft_ready/info/Industrial_and_Scientific_5_2016-10-2018-11.txt"   --result_json_data "./output/eval_final.json"   --num_beams 20   --cf_hints_path "./data/processed/Industrial_and_Scientific/cf_hints.json"
 ```
 
 **计算指标：**
 
 ```bash
-python tool/calc.py --file ./output/eval_result.json
+python tool/calc.py --path ./output/eval_final.json --item_path data/sft_ready/info/Industrial_and_Scientific_5_2016-10-2018-11.txt
 ```
 
 ## 📊 实验对照
@@ -165,8 +165,8 @@ python tool/calc.py --file ./output/eval_result.json
 
 | 指标 | @1 | @3 | @5 | @10 | @20 |
 |------|-----|-----|-----|------|------|
-| NDCG | 0.6893 | 0.1129 | 0.1236 | 0.1336 | 0.1427 |
-| HR | 0.6893 | 0.1303 | 0.1564 | 0.1876 | 0.2273 |
+| NDCG | 0.1072 | 0.1276 | 0.1386 | 0.1507 | 0.1609 |
+| HR | 0.1072 | 0.1430 | 0.1697 | 0.2066 | 0.2468 |
 
 ### 表 4：Ours-MiniOneRec (Qwen2.5-7B-Instruct with Hints and Dropout)
 （指标：@3, @5, @10）
