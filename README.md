@@ -1,62 +1,65 @@
-
------
-
 # miniGR-CF: Collaborative-Enhanced Generative Recommendation
 
 **miniGR-CF** 是一个增强版的生成式推荐系统框架。它在原版 MiniOneRec (Qwen-0.5B) 的基础上，创新性地引入了 **LightGCN 协同提示 (Collaborative Hints)** 机制。通过将协同信号作为 Prompt 注入，并配合 **动态 Hint Dropout** 和 **防泄露清洗** 策略，本项目在保持语义泛化能力的同时，显著提升了推荐的排序精度。
 
 ## 📂 项目结构
 
-```text
+```
 miniGR-CF/
-├── data/
-│   ├── raw/                 # [需手动下载] 存放 Amazon 原始 .json.gz 文件
-│   └── processed/           # [自动生成] 中间数据 (.inter, .json, .npy)
-├── models/
-│   └── Qwen2.5-0.5B/        # [需下载] 预训练模型权重
-├── src/                     # 核心源码
-│   ├── process_raw.py       # 数据清洗 (含 2017-2018 时间过滤)
-│   ├── generate_sids.py     # 语义 ID 生成 (RQ-VAE/KMeans)
-│   ├── train_lightgcn.py    # 协同信号提取
-│   ├── generate_hints.py    # Hint 字典生成
-│   ├── convert_dataset.py   # SFT 数据转换 (主任务精简)
-│   ├── dataset.py           # 动态 Dataset (含 Dropout/多任务)
-│   ├── train.py             # SFT 训练入口 (5任务混合)
-│   ├── evaluate.py          # 推理生成
-│   └── metrics.py           # 指标计算
-└── output/                  # 训练日志与模型保存
+├── CF/                      # 协同过滤模块
+│   └── train_lightgcn.py    # LightGCN 训练脚本
+├── GR/                      # 生成式推荐模块
+│   ├── data.py              # 数据处理
+│   └── sft.py               # SFT 训练脚本
+├── RQ/                      # 语义量化模块
+│   └── rqkmeans_faiss.py    # RQ-KMeans 和 FAISS 实现
+├── tool/                    # 工具脚本
+│   ├── LogitProcessor.py    # Logit 处理器
+│   ├── amazon18_data_process.py  # Amazon 数据处理
+│   ├── amazon_text2emb.py   # 文本到向量嵌入
+│   ├── calc.py              # 指标计算
+│   ├── convert_dataset.py   # 数据集转换
+│   ├── evaluate.py          # 模型评估
+│   ├── gen_hints.py         # 生成协同提示
+│   └── utils.py             # 工具函数
+└── README.md                # 项目说明文档
 ```
 
-## 🛠️ 1. 环境准备
 
-推荐使用 Conda 环境（Python 3.10+）：
 
+## 🛠️ 环境要求与安装
+
+### 系统要求
+- Python >= 3.10
+- PyTorch >= 2.0.0 (支持CUDA)
+
+### 依赖包
 ```bash
-conda create -n minigr python=3.10 -y && conda activate minigr
 pip install torch>=2.0.0 transformers accelerate pandas numpy scipy scikit-learn fire tqdm
 conda install -c pytorch faiss-gpu
 ```
 
-## 📥 2. 资源准备
+### 可选依赖（如需要）
+```bash
+pip install datasets huggingface_hub
+```
 
-### 2.1 下载模型
+## 📥 数据与模型准备
 
+### 1. 下载模型
 请下载 Qwen2.5-0.5B 模型至 `models/` 目录：
 
 ```bash
 huggingface-cli download --repo-type model "Qwen/Qwen2.5-0.5B" --local-dir "models/Qwen2.5-0.5B" --local-dir-use-symlinks False
 ```
 
-### 2.2 下载数据
-
+### 2. 下载数据
 本项目默认使用 **Industrial and Scientific** 数据集。请从 [UCSD Amazon Data](https://nijianmo.github.io/amazon/index.html) 下载以下两个文件并放入 `data/raw/`：
 
   * `Industrial_and_Scientific_5.json.gz`
   * `meta_Industrial_and_Scientific.json.gz`
 
------
-
-## 🚀 3. 运行全流程 (Step-by-Step Pipeline)
+## 🚀 运行全流程 (Step-by-Step Pipeline)
 
 请按顺序执行以下命令。所有命令均已设计为单行执行。
 
@@ -78,6 +81,7 @@ python tool/amazon_text2emb.py --dataset Industrial_and_Scientific --root ./data
 ```bash
 python RQ/rqkmeans_faiss.py --dataset Industrial_and_Scientific --data_path data/processed/Industrial_and_Scientific/embeddings/Industrial_and_Scientific.emb-qwen-td.npy
 ```
+
 ### Step 3: 提取协同信号 (Collaborative Signals)
 
 训练 LightGCN 模型以捕获用户行为模式，并导出物品协同向量。
@@ -109,8 +113,6 @@ python tool/convert_dataset.py   --dataset_name Industrial_and_Scientific   --da
   * **数据构成**：主任务 (5760条) + 4个辅助任务 (各采样5760条) ≈ 2.88万条数据。
   * **机制**：主任务启用 **Hint Dropout (p=0.3)**，训练 10 Epochs (约 1.8万步)。
 
-<!-- end list -->
-
 ```bash
 python GR/sft.py   --category "Industrial_and_Scientific"   --output_dir "./output/sft_hints"   --base_model "./models/Qwen2.5-0.5B"   --train_file "./data/sft_ready/train/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --eval_file "./data/sft_ready/valid/Industrial_and_Scientific_5_2016-10-2018-11.csv"   --sid_index_path "./data/processed/Industrial_and_Scientific/Industrial_and_Scientific.index.json"   --item_meta_path "./data/processed/Industrial_and_Scientific/Industrial_and_Scientific.item.json"   --learning_rate 2e-5   --micro_batch_size 8   --batch_size 16   --num_epochs 10   --cutoff_len 1024 --cf_hints_path data/processed/Industrial_and_Scientific/cf_hints.json
 ```
@@ -132,8 +134,6 @@ python tool/evaluate.py   --category "Industrial_and_Scientific"   --base_model 
 python tool/calc.py --file ./output/eval_result.json
 ```
 
------
-
 ## 📊 实验对照
 
 | Experiment | Configuration | Hint Strategy |
@@ -141,6 +141,54 @@ python tool/calc.py --file ./output/eval_result.json
 | **Baseline-0.7b** | 原版0.7b复现 | 无 Hint |
 | **Baseline** | 原版的结果 | 无hint |
 | **miniGR-CF** | **采用qwen2.5-0.7bLightGCN 增强hints** | **Train: Dropout(0.3) & Clean Target / Test: Full Hint** |
+
+## 实验结果
+
+### 表 1：Baseline Qwen2.5-0.5B
+（指标：@1, @3, @5, @10, @20）
+
+| 指标 | @1 | @3 | @5 | @10 | @20 |
+|------|-----|-----|-----|------|------|
+| NDCG | 0.6709 | 0.0809 | 0.0855 | 0.0987 | 0.1106 |
+| HR | 0.6709 | 0.0882 | 0.0899 | 0.1409 | 0.1876 |
+
+### 表 2：Qwen2.5-0.5B with Collaborative Hints (No Dropout)
+（指标：@1, @3, @5, @10, @20）
+
+| 指标 | @1 | @3 | @5 | @10 | @20 |
+|------|-----|-----|-----|------|------|
+| NDCG | 0.6798 | 0.0999 | 0.1041 | 0.1087 | 0.1118 |
+| HR | 0.6798 | 0.1171 | 0.1258 | 0.1362 | 0.1528 |
+
+### 表 3：Qwen2.5-0.5B with Collaborative Hints (Dropout=0.3)
+（指标：@1, @3, @5, @10, @20）
+
+| 指标 | @1 | @3 | @5 | @10 | @20 |
+|------|-----|-----|-----|------|------|
+| NDCG | 0.6893 | 0.1129 | 0.1236 | 0.1336 | 0.1427 |
+| HR | 0.6893 | 0.1303 | 0.1564 | 0.1876 | 0.2273 |
+
+### 表 4：Ours-MiniOneRec (Qwen2.5-7B-Instruct with Hints and Dropout)
+（指标：@3, @5, @10）
+
+| 指标 | @3 | @5 | @10 |
+|------|-----|-----|------|
+| HR | 0.1143 | 0.1321 | 0.1586 |
+| NDCG | 0.1011 | 0.1084 | 0.1167 |
+
+### 性能提升对比（相对于Baseline Qwen2.5-0.5B）
+
+#### Qwen2.5-0.5B with Collaborative Hints (Dropout=0.3) vs Baseline:
+| 指标 | @1 | @3 | @5 | @10 | @20 |
+|------|-----|-----|-----|------|------|
+| NDCG 提升 | +0.0184 | +0.0320 | +0.0381 | +0.0349 | +0.0321 |
+| HR 提升 | +0.0184 | +0.0421 | +0.0665 | +0.0467 | +0.0397 |
+
+#### Ours-MiniOneRec vs Baseline:
+| 指标 | @1 | @3 | @5 | @10 | @20 |
+|------|-----|-----|-----|------|------|
+| HR 提升 | 0 | -0.0239 | +0.0422 | +0.0177 | -0.0290 |
+| NDCG 提升 | 0 | +0.0202 | +0.0229 | +0.0180 | 0 |
 
 ## 🔖 Citation & Acknowledgement
 
